@@ -37,7 +37,7 @@ namespace ThinkPadKbBacklight
             sb.AppendLine("-- Idle monitor --");
             bool ignoreExternal = cfg != null && cfg.IgnoreExternalDevices;
             sb.AppendLine("Mode:                 " + (ignoreExternal
-                ? "RawInput (internal devices only)"
+                ? "Hybrid (RawInput + GetLastInputInfo, internal devices only)"
                 : "GetLastInputInfo (any input)"));
             string[] markers = (cfg != null && cfg.InternalDeviceMarkers != null && cfg.InternalDeviceMarkers.Length > 0)
                 ? cfg.InternalDeviceMarkers

@@ -31,6 +31,13 @@ namespace ThinkPadKbBacklight
             public IntPtr wParam;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LASTINPUTINFO
+        {
+            public uint cbSize;
+            public uint dwTime;
+        }
+
         [DllImport("user32", SetLastError = true)]
         private static extern bool RegisterRawInputDevices(
             [In] RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
@@ -42,6 +49,9 @@ namespace ThinkPadKbBacklight
         [DllImport("user32", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern uint GetRawInputDeviceInfoW(
             IntPtr hDevice, uint uiCommand, StringBuilder pData, ref uint pcbSize);
+
+        [DllImport("user32", SetLastError = true)]
+        private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
 
         [DllImport("kernel32")]
         private static extern uint GetTickCount();
@@ -63,9 +73,17 @@ namespace ThinkPadKbBacklight
         private readonly string[] _markers;
         private readonly Dictionary<IntPtr, bool> _classifyCache = new Dictionary<IntPtr, bool>();
         private uint _lastInternalTick;
+        private uint _lastExternalWmTick;
+        private uint _lastInternalWmTick;
+        private uint _lastObservedSystemTick;
         private bool _currentlyIdle;
         private bool _paused;
         private bool _registered;
+
+        // How recent a WM_INPUT event must be to be considered the "cause" of
+        // a system-input-tick bump. Comfortably larger than the 500ms poll
+        // interval to absorb normal scheduling jitter.
+        private const uint CausalWindowMs = 750;
 
         public int TimeoutSeconds { get; set; }
 
@@ -78,6 +96,7 @@ namespace ThinkPadKbBacklight
                 if (!_paused)
                 {
                     _lastInternalTick = GetTickCount();
+                    _lastObservedSystemTick = ReadSystemInputTick();
                     _currentlyIdle = false;
                 }
             }
@@ -90,10 +109,18 @@ namespace ThinkPadKbBacklight
                 ? internalMarkers
                 : DefaultMarkers();
             _lastInternalTick = GetTickCount();
+            _lastObservedSystemTick = ReadSystemInputTick();
             _window = new MessageWindow(this);
             _window.CreateHandle(new CreateParams { Parent = (IntPtr)HWND_MESSAGE });
             _timer = new Timer { Interval = 500 };
             _timer.Tick += OnTick;
+        }
+
+        private static uint ReadSystemInputTick()
+        {
+            var lii = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO)) };
+            GetLastInputInfo(ref lii);
+            return lii.dwTime;
         }
 
         public static string[] DefaultMarkers()
@@ -110,10 +137,17 @@ namespace ThinkPadKbBacklight
 
         public void Start()
         {
+            // Register for keyboard + mouse (usage page 1) AND digitizer usages
+            // (usage page 0x0D): touchpad, touchscreen, pen. Precision Touchpads
+            // often surface through the digitizer page rather than as an HID
+            // mouse, so covering both catches more devices.
             var devs = new[]
             {
-                new RAWINPUTDEVICE { usUsagePage = 1, usUsage = 6, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
-                new RAWINPUTDEVICE { usUsagePage = 1, usUsage = 2, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
+                new RAWINPUTDEVICE { usUsagePage = 0x01, usUsage = 0x06, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
+                new RAWINPUTDEVICE { usUsagePage = 0x01, usUsage = 0x02, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
+                new RAWINPUTDEVICE { usUsagePage = 0x0D, usUsage = 0x05, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
+                new RAWINPUTDEVICE { usUsagePage = 0x0D, usUsage = 0x04, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
+                new RAWINPUTDEVICE { usUsagePage = 0x0D, usUsage = 0x02, dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, hwndTarget = _window.Handle },
             };
             _registered = RegisterRawInputDevices(devs, (uint)devs.Length, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
             _timer.Start();
@@ -123,6 +157,34 @@ namespace ThinkPadKbBacklight
         {
             if (_paused) return;
             uint now = GetTickCount();
+
+            // Hybrid fallback: some Precision Touchpad drivers consume HID
+            // reports and inject synthetic mouse input into the system input
+            // queue without firing WM_INPUT. We'd miss those via raw-input
+            // alone. So we also watch the system-wide input tick — if it
+            // advanced and the only recent raw-input source we saw was an
+            // external device, ignore it; otherwise count it as internal.
+            uint systemTick = ReadSystemInputTick();
+            if (systemTick != _lastObservedSystemTick)
+            {
+                _lastObservedSystemTick = systemTick;
+                uint deltaExternal = unchecked(now - _lastExternalWmTick);
+                uint deltaInternal = unchecked(now - _lastInternalWmTick);
+                bool externalRecent = _lastExternalWmTick != 0 && deltaExternal <= CausalWindowMs;
+                bool internalRecent = _lastInternalWmTick != 0 && deltaInternal <= CausalWindowMs;
+                bool externalOnly = externalRecent && !internalRecent;
+                if (!externalOnly)
+                {
+                    _lastInternalTick = now;
+                    if (_currentlyIdle)
+                    {
+                        _currentlyIdle = false;
+                        var ah = ActivityDetected;
+                        if (ah != null) ah(this, EventArgs.Empty);
+                    }
+                }
+            }
+
             uint idleMs = unchecked(now - _lastInternalTick);
             if (!_currentlyIdle && idleMs >= (uint)(TimeoutSeconds * 1000))
             {
@@ -149,6 +211,7 @@ namespace ThinkPadKbBacklight
                     _classifyCache[header.hDevice] = isInternal;
                 }
                 if (isInternal) OnInternalActivity();
+                else OnExternalActivity();
             }
             finally
             {
@@ -159,13 +222,20 @@ namespace ThinkPadKbBacklight
         private void OnInternalActivity()
         {
             if (_paused) return;
-            _lastInternalTick = GetTickCount();
+            uint now = GetTickCount();
+            _lastInternalWmTick = now;
+            _lastInternalTick = now;
             if (_currentlyIdle)
             {
                 _currentlyIdle = false;
                 var h = ActivityDetected;
                 if (h != null) h(this, EventArgs.Empty);
             }
+        }
+
+        private void OnExternalActivity()
+        {
+            _lastExternalWmTick = GetTickCount();
         }
 
         private bool Classify(IntPtr hDevice)
@@ -202,8 +272,11 @@ namespace ThinkPadKbBacklight
             {
                 var devs = new[]
                 {
-                    new RAWINPUTDEVICE { usUsagePage = 1, usUsage = 6, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
-                    new RAWINPUTDEVICE { usUsagePage = 1, usUsage = 2, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
+                    new RAWINPUTDEVICE { usUsagePage = 0x01, usUsage = 0x06, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
+                    new RAWINPUTDEVICE { usUsagePage = 0x01, usUsage = 0x02, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
+                    new RAWINPUTDEVICE { usUsagePage = 0x0D, usUsage = 0x05, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
+                    new RAWINPUTDEVICE { usUsagePage = 0x0D, usUsage = 0x04, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
+                    new RAWINPUTDEVICE { usUsagePage = 0x0D, usUsage = 0x02, dwFlags = RIDEV_REMOVE, hwndTarget = IntPtr.Zero },
                 };
                 try { RegisterRawInputDevices(devs, (uint)devs.Length, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE))); } catch { }
                 _registered = false;
