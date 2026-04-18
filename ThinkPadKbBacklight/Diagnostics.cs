@@ -131,16 +131,19 @@ namespace ThinkPadKbBacklight
         {
             sb.AppendLine("-- Legacy IbmPmDrv --");
             sb.AppendLine(@"\\.\IBMPmDrv opens: " + ctrl.IbmPmDrvOpen);
-            if (ctrl.IbmPmDrvOpen && ctrl.TryGetIbmPmDrvState(out int code, out int cur, out int max, out bool hasBl, out string err))
+            if (ctrl.IbmPmDrvOpen)
             {
-                sb.AppendLine(string.Format("  raw code:          0x{0:X8}", code));
-                sb.AppendLine(string.Format("  current level:     {0}", cur));
-                sb.AppendLine(string.Format("  max level:         {0}", max));
-                sb.AppendLine(string.Format("  has-backlight bit: {0}", hasBl));
-            }
-            else if (ctrl.IbmPmDrvOpen)
-            {
-                sb.AppendLine("  could not read state: " + err);
+                if (ctrl.TryGetIbmPmDrvState(out int code, out int cur, out int max, out bool hasBl, out string err))
+                {
+                    sb.AppendLine(string.Format("  raw code:          0x{0:X8}", code));
+                    sb.AppendLine(string.Format("  current level:     {0}", cur));
+                    sb.AppendLine(string.Format("  max level:         {0}", max));
+                    sb.AppendLine(string.Format("  has-backlight bit: {0}", hasBl));
+                }
+                else
+                {
+                    sb.AppendLine("  could not read state: " + err);
+                }
             }
             sb.AppendLine();
         }
