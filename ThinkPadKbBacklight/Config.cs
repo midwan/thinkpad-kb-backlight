@@ -11,6 +11,7 @@ namespace ThinkPadKbBacklight
         public int OnLevel { get; set; } = 2;
         public int OffLevel { get; set; } = 0;
         public bool Paused { get; set; } = false;
+        public bool RestorePreviousLevel { get; set; } = true;
 
         public static string DefaultPath
         {

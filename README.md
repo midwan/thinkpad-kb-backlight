@@ -37,6 +37,7 @@ Whichever one works wins. The diagnostic report tells you which backend is activ
 - **Status** — current state
 - **Pause** — stop reacting to activity and leave the backlight at your "on" level (useful for presentations)
 - **Timeout** — pick 10 s … 10 min
+- **Remember previous level** — when on (default), the app reads the current backlight level right before turning off, then restores to that on wake. Lets you set a dimmer level via `Fn+Space` and have it stick. When off, wake always goes to the `OnLevel` in config.
 - **Run diagnostics…** — regenerate the report on the Desktop
 - **Open config folder** — shows `%AppData%\ThinkPadKbBacklight\config.json`
 - **Exit**
@@ -50,11 +51,14 @@ Whichever one works wins. The diagnostic report tells you which backend is activ
   "TimeoutSeconds": 30,
   "OnLevel": 2,
   "OffLevel": 0,
-  "Paused": false
+  "Paused": false,
+  "RestorePreviousLevel": true
 }
 ```
 
 Levels: 0 = off, 1 = low, 2 = high. Edit and relaunch.
+
+`RestorePreviousLevel` controls whether the app tracks the level you had before idle and restores to it on wake. `OnLevel` is only used when this is `false` (or as the initial wake level at startup if the backlight is currently off).
 
 ## Diagnostics report
 

@@ -20,6 +20,8 @@ namespace ThinkPadKbBacklight
         private readonly ToolStripMenuItem _miPause;
         private readonly ToolStripMenuItem _miStatus;
         private readonly ToolStripMenuItem _miTimeout;
+        private readonly ToolStripMenuItem _miRemember;
+        private int _lastOnLevel;
 
         public TrayAppContext()
         {
@@ -57,6 +59,14 @@ namespace ThinkPadKbBacklight
             }
             menu.Items.Add(_miTimeout);
 
+            _miRemember = new ToolStripMenuItem("Remember previous level", null, OnToggleRemember)
+            {
+                CheckOnClick = true,
+                Checked = _config.RestorePreviousLevel,
+                ToolTipText = "When on, restore whatever level was set before idle. When off, always wake to the 'OnLevel' from config.",
+            };
+            menu.Items.Add(_miRemember);
+
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Run diagnostics…", null, OnDiagnose);
             menu.Items.Add("Open config folder", null, OnOpenConfig);
@@ -68,8 +78,13 @@ namespace ThinkPadKbBacklight
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
             SystemEvents.SessionSwitch += OnSessionSwitch;
 
+            _lastOnLevel = _config.OnLevel;
+            if (_ctrl.TryGetLevel(out int startupLevel, out _) && startupLevel >= 1)
+                _lastOnLevel = startupLevel;
+
             RefreshStatus();
-            if (!_config.Paused) SetBacklight(_config.OnLevel);
+            if (!_config.Paused && (!_ctrl.TryGetLevel(out int cur, out _) || cur == 0))
+                SetBacklight(WakeLevel());
             _idle.Start();
 
             if (firstRun)
@@ -101,13 +116,31 @@ namespace ThinkPadKbBacklight
 
         private void OnActivity(object sender, EventArgs e)
         {
-            SetBacklight(_config.OnLevel);
+            SetBacklight(WakeLevel());
             RefreshStatus();
         }
 
         private void OnIdle(object sender, EventArgs e)
         {
+            if (_config.RestorePreviousLevel
+                && _ctrl.TryGetLevel(out int current, out _)
+                && current >= 1)
+            {
+                _lastOnLevel = current;
+            }
             SetBacklight(_config.OffLevel);
+            RefreshStatus();
+        }
+
+        private int WakeLevel()
+        {
+            return _config.RestorePreviousLevel ? _lastOnLevel : _config.OnLevel;
+        }
+
+        private void OnToggleRemember(object sender, EventArgs e)
+        {
+            _config.RestorePreviousLevel = _miRemember.Checked;
+            _config.Save(_configPath);
             RefreshStatus();
         }
 
@@ -125,7 +158,7 @@ namespace ThinkPadKbBacklight
             }
             _config.Paused = paused;
             _idle.Paused = paused;
-            if (paused) SetBacklight(_config.OnLevel);
+            if (paused) SetBacklight(WakeLevel());
             _config.Save(_configPath);
             RefreshStatus();
         }
@@ -173,7 +206,7 @@ namespace ThinkPadKbBacklight
         {
             if (e.Mode == PowerModes.Resume)
             {
-                if (!_config.Paused) SetBacklight(_config.OnLevel);
+                if (!_config.Paused) SetBacklight(WakeLevel());
                 RefreshStatus();
             }
         }
@@ -182,7 +215,7 @@ namespace ThinkPadKbBacklight
         {
             if (e.Reason == SessionSwitchReason.SessionUnlock || e.Reason == SessionSwitchReason.ConsoleConnect)
             {
-                if (!_config.Paused) SetBacklight(_config.OnLevel);
+                if (!_config.Paused) SetBacklight(WakeLevel());
                 RefreshStatus();
             }
         }
