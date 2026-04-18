@@ -15,12 +15,13 @@ namespace ThinkPadKbBacklight
         private readonly Config _config;
         private readonly string _configPath;
         private readonly BacklightController _ctrl;
-        private readonly IdleMonitor _idle;
+        private IIdleMonitor _idle;
         private readonly NotifyIcon _tray;
         private readonly ToolStripMenuItem _miPause;
         private readonly ToolStripMenuItem _miStatus;
         private readonly ToolStripMenuItem _miTimeout;
         private readonly ToolStripMenuItem _miRemember;
+        private readonly ToolStripMenuItem _miIgnoreExternal;
         private int _lastOnLevel;
 
         public TrayAppContext()
@@ -30,9 +31,7 @@ namespace ThinkPadKbBacklight
             _config = Config.LoadOrDefault(_configPath);
 
             _ctrl = new BacklightController();
-            _idle = new IdleMonitor(_config.TimeoutSeconds) { Paused = _config.Paused };
-            _idle.ActivityDetected += OnActivity;
-            _idle.IdleTimeoutElapsed += OnIdle;
+            _idle = BuildMonitor();
 
             _tray = new NotifyIcon
             {
@@ -67,6 +66,14 @@ namespace ThinkPadKbBacklight
             };
             menu.Items.Add(_miRemember);
 
+            _miIgnoreExternal = new ToolStripMenuItem("Ignore external input", null, OnToggleIgnoreExternal)
+            {
+                CheckOnClick = true,
+                Checked = _config.IgnoreExternalDevices,
+                ToolTipText = "When on, only the built-in keyboard / TrackPoint / TouchPad reset the idle timer. External USB mice and keyboards are ignored.",
+            };
+            menu.Items.Add(_miIgnoreExternal);
+
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Run diagnostics…", null, OnDiagnose);
             menu.Items.Add("Open config folder", null, OnOpenConfig);
@@ -91,7 +98,7 @@ namespace ThinkPadKbBacklight
             {
                 try
                 {
-                    string path = Diagnostics.Run(_ctrl, runBacklightCycle: true);
+                    string path = Diagnostics.Run(_ctrl, runBacklightCycle: true, _config);
                     _tray.ShowBalloonTip(5000, "ThinkPadKbBacklight",
                         "First-run diagnostics written to Desktop.", ToolTipIcon.Info);
                     Process.Start("notepad.exe", "\"" + path + "\"");
@@ -144,6 +151,40 @@ namespace ThinkPadKbBacklight
             RefreshStatus();
         }
 
+        private void OnToggleIgnoreExternal(object sender, EventArgs e)
+        {
+            _config.IgnoreExternalDevices = _miIgnoreExternal.Checked;
+            _config.Save(_configPath);
+            RebuildMonitor();
+            RefreshStatus();
+        }
+
+        private IIdleMonitor BuildMonitor()
+        {
+            IIdleMonitor m;
+            if (_config.IgnoreExternalDevices)
+                m = new RawInputIdleMonitor(_config.TimeoutSeconds, _config.InternalDeviceMarkers);
+            else
+                m = new IdleMonitor(_config.TimeoutSeconds);
+            m.Paused = _config.Paused;
+            m.ActivityDetected += OnActivity;
+            m.IdleTimeoutElapsed += OnIdle;
+            return m;
+        }
+
+        private void RebuildMonitor()
+        {
+            var old = _idle;
+            _idle = BuildMonitor();
+            _idle.Start();
+            if (old != null)
+            {
+                old.ActivityDetected -= OnActivity;
+                old.IdleTimeoutElapsed -= OnIdle;
+                old.Dispose();
+            }
+        }
+
         private void OnTogglePause(object sender, EventArgs e)
         {
             bool paused;
@@ -177,7 +218,7 @@ namespace ThinkPadKbBacklight
         {
             try
             {
-                string path = Diagnostics.Run(_ctrl, runBacklightCycle: true);
+                string path = Diagnostics.Run(_ctrl, runBacklightCycle: true, _config);
                 Process.Start("notepad.exe", "\"" + path + "\"");
             }
             catch (Exception ex)

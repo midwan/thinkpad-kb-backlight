@@ -12,6 +12,8 @@ namespace ThinkPadKbBacklight
         public int OffLevel { get; set; } = 0;
         public bool Paused { get; set; } = false;
         public bool RestorePreviousLevel { get; set; } = true;
+        public bool IgnoreExternalDevices { get; set; } = false;
+        public string[] InternalDeviceMarkers { get; set; } = null;
 
         public static string DefaultPath
         {

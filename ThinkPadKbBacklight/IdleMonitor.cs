@@ -4,7 +4,7 @@ using System.Windows.Forms;
 
 namespace ThinkPadKbBacklight
 {
-    internal sealed class IdleMonitor : IDisposable
+    internal sealed class IdleMonitor : IIdleMonitor
     {
         [StructLayout(LayoutKind.Sequential)]
         private struct LASTINPUTINFO

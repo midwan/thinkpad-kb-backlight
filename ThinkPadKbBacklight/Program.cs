@@ -16,7 +16,8 @@ namespace ThinkPadKbBacklight
             {
                 using (var ctrl = new BacklightController())
                 {
-                    string path = Diagnostics.Run(ctrl, runBacklightCycle: true);
+                    var cfg = Config.LoadOrDefault(Config.DefaultPath);
+                    string path = Diagnostics.Run(ctrl, runBacklightCycle: true, cfg);
                     try { Process.Start("notepad.exe", "\"" + path + "\""); } catch { }
                 }
                 return 0;

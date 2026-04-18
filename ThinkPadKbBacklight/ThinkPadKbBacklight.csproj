@@ -47,7 +47,9 @@
     <Compile Include="Program.cs" />
     <Compile Include="TrayAppContext.cs" />
     <Compile Include="BacklightController.cs" />
+    <Compile Include="IIdleMonitor.cs" />
     <Compile Include="IdleMonitor.cs" />
+    <Compile Include="RawInputIdleMonitor.cs" />
     <Compile Include="Diagnostics.cs" />
     <Compile Include="Config.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

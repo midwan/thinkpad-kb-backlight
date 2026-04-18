@@ -38,6 +38,7 @@ Whichever one works wins. The diagnostic report tells you which backend is activ
 - **Pause** — stop reacting to activity and leave the backlight at your "on" level (useful for presentations)
 - **Timeout** — pick 10 s … 10 min
 - **Remember previous level** — when on (default), the app reads the current backlight level right before turning off, then restores to that on wake. Lets you set a dimmer level via `Fn+Space` and have it stick. When off, wake always goes to the `OnLevel` in config.
+- **Ignore external input** — when on, only the built-in keyboard / TrackPoint / TouchPad reset the idle timer. External USB mice and keyboards are ignored, so scrolling an external mouse while reading will not wake the backlight. Off by default (uses Windows' system-wide idle timer, which sees any input).
 - **Run diagnostics…** — regenerate the report on the Desktop
 - **Open config folder** — shows `%AppData%\ThinkPadKbBacklight\config.json`
 - **Exit**
@@ -52,13 +53,22 @@ Whichever one works wins. The diagnostic report tells you which backend is activ
   "OnLevel": 2,
   "OffLevel": 0,
   "Paused": false,
-  "RestorePreviousLevel": true
+  "RestorePreviousLevel": true,
+  "IgnoreExternalDevices": false,
+  "InternalDeviceMarkers": null
 }
 ```
 
 Levels: 0 = off, 1 = low, 2 = high. Edit and relaunch.
 
 `RestorePreviousLevel` controls whether the app tracks the level you had before idle and restores to it on wake. `OnLevel` is only used when this is `false` (or as the initial wake level at startup if the backlight is currently off).
+
+`IgnoreExternalDevices` flips the idle monitor between two modes:
+
+- **off** (default): `GetLastInputInfo` — the system-wide idle clock. Any input, anywhere, counts.
+- **on**: RawInput-based, per-device. Only devices whose raw-input path matches one of the `InternalDeviceMarkers` substrings (case-insensitive) reset the idle timer.
+
+`InternalDeviceMarkers` is a list of substrings matched against the raw-input device name. `null` (default) means use the built-in list: `["ACPI\\", "LEN", "VID_17EF", "VEN_SYN", "VEN_ELAN", "VEN_IBM"]`. That covers PS/2 built-in keyboard + TrackPoint, Lenovo-branded HIDs, and Synaptics/Elan touchpads, which is what ships on modern ThinkPads. Run diagnostics to see how your devices classify, and add markers if something is misclassified.
 
 ## Diagnostics report
 

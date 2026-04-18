@@ -13,6 +13,11 @@ namespace ThinkPadKbBacklight
     {
         public static string Run(BacklightController ctrl, bool runBacklightCycle)
         {
+            return Run(ctrl, runBacklightCycle, null);
+        }
+
+        public static string Run(BacklightController ctrl, bool runBacklightCycle, Config cfg)
+        {
             var sb = new StringBuilder();
             Header(sb);
             OsAndModel(sb);
@@ -20,10 +25,25 @@ namespace ThinkPadKbBacklight
             DllSearch(sb, ctrl);
             IbmPmDrvBlock(sb, ctrl);
             Backend(sb, ctrl);
-            RawInputDevices(sb);
+            IdleMonitorMode(sb, cfg);
+            RawInputDevices(sb, cfg);
             CurrentLevel(sb, ctrl);
             if (runBacklightCycle) Cycle(sb, ctrl);
             return WriteLog(sb.ToString());
+        }
+
+        private static void IdleMonitorMode(StringBuilder sb, Config cfg)
+        {
+            sb.AppendLine("-- Idle monitor --");
+            bool ignoreExternal = cfg != null && cfg.IgnoreExternalDevices;
+            sb.AppendLine("Mode:                 " + (ignoreExternal
+                ? "RawInput (internal devices only)"
+                : "GetLastInputInfo (any input)"));
+            string[] markers = (cfg != null && cfg.InternalDeviceMarkers != null && cfg.InternalDeviceMarkers.Length > 0)
+                ? cfg.InternalDeviceMarkers
+                : RawInputIdleMonitor.DefaultMarkers();
+            sb.AppendLine("Internal markers:     " + string.Join(", ", markers));
+            sb.AppendLine();
         }
 
         private static void Header(StringBuilder sb)
@@ -173,9 +193,13 @@ namespace ThinkPadKbBacklight
 
         private const uint RIDI_DEVICENAME = 0x20000007;
 
-        private static void RawInputDevices(StringBuilder sb)
+        private static void RawInputDevices(StringBuilder sb, Config cfg)
         {
             sb.AppendLine("-- Raw input devices (HID keyboards/mice) --");
+            string[] markers = (cfg != null && cfg.InternalDeviceMarkers != null && cfg.InternalDeviceMarkers.Length > 0)
+                ? cfg.InternalDeviceMarkers
+                : RawInputIdleMonitor.DefaultMarkers();
+            sb.AppendLine("(classification: internal = would wake; external = ignored when 'Ignore external input' is on)");
             try
             {
                 uint count = 0;
@@ -193,8 +217,10 @@ namespace ThinkPadKbBacklight
                     if (strSize == 0) continue;
                     var buf = new StringBuilder((int)strSize + 1);
                     GetRawInputDeviceInfoW(d.hDevice, RIDI_DEVICENAME, buf, ref strSize);
+                    string name = buf.ToString();
                     string type = d.dwType == 0 ? "mouse" : d.dwType == 1 ? "keyboard" : "hid";
-                    sb.AppendLine("  [" + type + "] " + buf.ToString());
+                    string classification = RawInputIdleMonitor.IsInternalName(name, markers) ? "INTERNAL" : "external";
+                    sb.AppendLine(string.Format("  [{0,-8}] [{1}] {2}", type, classification, name));
                     printed++;
                 }
                 if (printed == 0) sb.AppendLine("  (none listed)");
