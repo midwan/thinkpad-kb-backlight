@@ -2,7 +2,12 @@
 
 Tiny Windows tray app that keeps the ThinkPad keyboard backlight **on while you're using the machine**, then turns it off after an idle timeout. Any keyboard, mouse, or trackpad activity brings it back and restarts the timer.
 
-Targets recent ThinkPads (X1 Carbon Gen 9+, etc.) where the old `IbmPmDrv`-based tools no longer work. Uses Lenovo Vantage's `Keyboard_Core.dll` at runtime, so it only works on machines with Vantage (or the ThinkPad Hotkey Features package) installed.
+Targets recent ThinkPads (X1 Carbon Gen 9, etc.). Tries two backends automatically:
+
+1. **Lenovo Vantage's `Keyboard_Core.dll`** (if present — searched under `Program Files`, `Program Files (x86)`, and `WindowsApps`)
+2. **Legacy `\\.\IBMPmDrv`** kernel driver (still present on many recent ThinkPads, including X1 Carbon Gen 9)
+
+Whichever one works wins. The diagnostic report tells you which backend is active.
 
 ## What this is vs. what it isn't
 
@@ -15,7 +20,7 @@ Targets recent ThinkPads (X1 Carbon Gen 9+, etc.) where the old `IbmPmDrv`-based
 
 - Windows 10 / 11 (including LTSC / IoT Enterprise)
 - .NET Framework 4.8 (preinstalled on Win10 1903+)
-- Lenovo Vantage **or** ThinkPad Hotkey Features installed (provides `Keyboard_Core.dll`)
+- Either Lenovo Vantage / ThinkPad Hotkey Features installed **or** the legacy Lenovo Power Manager driver (ships with factory Windows images; exposes `\\.\IBMPmDrv`)
 
 ## Install
 

@@ -19,6 +19,7 @@ namespace ThinkPadKbBacklight
             Vantage(sb);
             DllSearch(sb, ctrl);
             IbmPmDrvBlock(sb, ctrl);
+            Backend(sb, ctrl);
             RawInputDevices(sb);
             CurrentLevel(sb, ctrl);
             if (runBacklightCycle) Cycle(sb, ctrl);
@@ -110,21 +111,44 @@ namespace ThinkPadKbBacklight
         {
             sb.AppendLine("-- Keyboard_Core.dll search --");
             int count = 0;
-            foreach (var path in ctrl.FoundKeyboardCoreDlls())
+            var paths = ctrl.FoundKeyboardCoreDllsWithStatus(out var denied);
+            foreach (var path in paths)
             {
                 sb.AppendLine("  FOUND: " + path);
                 count++;
             }
             if (count == 0) sb.AppendLine("  no matches found");
+            if (denied != null && denied.Count > 0)
+            {
+                sb.AppendLine("  (note: access denied while enumerating: " + string.Join(", ", denied.ToArray()) + ")");
+            }
             sb.AppendLine("Loaded DLL:           " + (ctrl.DllPath ?? "(none)"));
-            sb.AppendLine("SetKeyboardBackLightStatus resolved: " + ctrl.IsReady);
+            sb.AppendLine("SetKeyboardBackLightStatus resolved: " + ctrl.VantageDllReady);
             sb.AppendLine();
         }
 
         private static void IbmPmDrvBlock(StringBuilder sb, BacklightController ctrl)
         {
             sb.AppendLine("-- Legacy IbmPmDrv --");
-            sb.AppendLine(@"\\.\IBMPmDrv opens: " + ctrl.IbmPmDrvPresent);
+            sb.AppendLine(@"\\.\IBMPmDrv opens: " + ctrl.IbmPmDrvOpen);
+            if (ctrl.IbmPmDrvOpen && ctrl.TryGetIbmPmDrvState(out int code, out int cur, out int max, out bool hasBl, out string err))
+            {
+                sb.AppendLine(string.Format("  raw code:          0x{0:X8}", code));
+                sb.AppendLine(string.Format("  current level:     {0}", cur));
+                sb.AppendLine(string.Format("  max level:         {0}", max));
+                sb.AppendLine(string.Format("  has-backlight bit: {0}", hasBl));
+            }
+            else if (ctrl.IbmPmDrvOpen)
+            {
+                sb.AppendLine("  could not read state: " + err);
+            }
+            sb.AppendLine();
+        }
+
+        private static void Backend(StringBuilder sb, BacklightController ctrl)
+        {
+            sb.AppendLine("-- Active backend --");
+            sb.AppendLine("Using:                " + ctrl.ActiveBackend);
             sb.AppendLine();
         }
 
@@ -194,7 +218,7 @@ namespace ThinkPadKbBacklight
             sb.AppendLine("-- Backlight cycle test --");
             if (!ctrl.IsReady)
             {
-                sb.AppendLine("Skipped: controller not ready.");
+                sb.AppendLine("Skipped: no backend ready.");
                 sb.AppendLine();
                 return;
             }
