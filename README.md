@@ -1,0 +1,85 @@
+# ThinkPadKbBacklight
+
+Tiny Windows tray app that keeps the ThinkPad keyboard backlight **on while you're using the machine**, then turns it off after an idle timeout. Any keyboard, mouse, or trackpad activity brings it back and restarts the timer.
+
+Targets recent ThinkPads (X1 Carbon Gen 9+, etc.) where the old `IbmPmDrv`-based tools no longer work. Uses Lenovo Vantage's `Keyboard_Core.dll` at runtime, so it only works on machines with Vantage (or the ThinkPad Hotkey Features package) installed.
+
+## What this is vs. what it isn't
+
+- ✅ Idle-off + activity-wake timer for the keyboard backlight
+- ✅ Configurable timeout, "on" level (1 = low, 2 = high), and a pause toggle
+- ✅ First-run diagnostic dump so we can debug without a round trip
+- ❌ Not an ambient light / auto screen brightness tool (that was the extra feature in the 2020 pspatel repo; left out here on purpose)
+
+## Requirements
+
+- Windows 10 / 11 (including LTSC / IoT Enterprise)
+- .NET Framework 4.8 (preinstalled on Win10 1903+)
+- Lenovo Vantage **or** ThinkPad Hotkey Features installed (provides `Keyboard_Core.dll`)
+
+## Install
+
+1. Download `ThinkPadKbBacklight.exe` from the Releases page (or the Actions artifact).
+2. Put it anywhere, e.g. `%LocalAppData%\ThinkPadKbBacklight\`.
+3. Double-click to run. A tray icon appears.
+4. On **first run**, a diagnostic report is written to the Desktop and opened in Notepad. During this, the backlight will cycle off → low → high → off. That's expected — it's confirming what levels actually work.
+5. To autostart, press `Win+R` → `shell:startup` → drop a shortcut in the folder.
+
+> SmartScreen: the binary is unsigned, so Windows will warn on first run. Click "More info" → "Run anyway" if you trust the source.
+
+## Tray menu
+
+- **Status** — current state
+- **Pause** — stop reacting to activity and leave the backlight at your "on" level (useful for presentations)
+- **Timeout** — pick 10 s … 10 min
+- **Run diagnostics…** — regenerate the report on the Desktop
+- **Open config folder** — shows `%AppData%\ThinkPadKbBacklight\config.json`
+- **Exit**
+
+## Config file
+
+`%AppData%\ThinkPadKbBacklight\config.json`:
+
+```json
+{
+  "TimeoutSeconds": 30,
+  "OnLevel": 2,
+  "OffLevel": 0,
+  "Paused": false
+}
+```
+
+Levels: 0 = off, 1 = low, 2 = high. Edit and relaunch.
+
+## Diagnostics report
+
+On first run (or via the tray menu), the app writes `ThinkPadKbBacklight-diagnostic-*.txt` to the Desktop. It records:
+
+- Windows version, model, BIOS
+- Where `Keyboard_Core.dll` lives (searches Program Files, Program Files (x86), WindowsApps)
+- Whether the legacy `\\.\IBMPmDrv` device opens
+- Raw input devices (keyboard/mouse) visible to the OS
+- Current backlight level (if readable)
+- Off → low → high → off cycle test with OK/FAIL per step
+
+If the backlight did **not** visibly change during the cycle test, send the report — it tells us exactly what to try next.
+
+## Build from source
+
+Windows + Visual Studio 2022 (or Build Tools) with the .NET desktop workload:
+
+```powershell
+msbuild ThinkPadKbBacklight.sln /p:Configuration=Release /p:Platform=x86
+```
+
+Output: `ThinkPadKbBacklight\bin\Release\ThinkPadKbBacklight.exe`
+
+CI builds on every push to `main`; tagging `vX.Y.Z` creates a GitHub Release with the zipped binary attached.
+
+## Why not just use / fix the original repo?
+
+[pspatel321/auto-backlight-for-thinkpad](https://github.com/pspatel321/auto-backlight-for-thinkpad) last shipped in May 2020. Its open [PR #8](https://github.com/pspatel321/auto-backlight-for-thinkpad/pull/8) fixes raw-input device detection on newer ThinkPads, but the underlying backlight control still goes through the legacy `IbmPmDrv` kernel driver that ships with old Power Manager — no longer installed on Gen 9+. This project sidesteps that by going through the Vantage DLL instead, which is the path Lenovo's own software uses on modern models.
+
+## License
+
+MIT.

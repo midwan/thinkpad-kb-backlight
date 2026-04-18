@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore
+        run: nuget restore ThinkPadKbBacklight.sln
+
+      - name: Build (Release x86)
+        run: msbuild ThinkPadKbBacklight.sln /p:Configuration=Release /p:Platform=x86 /m
+
+      - name: Stage artifact
+        shell: pwsh
+        run: |
+          $out = "artifact"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "ThinkPadKbBacklight\bin\Release\ThinkPadKbBacklight.exe" $out
+          Copy-Item "ThinkPadKbBacklight\bin\Release\ThinkPadKbBacklight.exe.config" $out -ErrorAction SilentlyContinue
+          Copy-Item "README.md" $out -ErrorAction SilentlyContinue
+          Copy-Item "LICENSE" $out -ErrorAction SilentlyContinue
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThinkPadKbBacklight
+          path: artifact/
+          if-no-files-found: error
+
+      - name: Create zip for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Compress-Archive -Path artifact/* -DestinationPath ThinkPadKbBacklight.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ThinkPadKbBacklight.zip
+          generate_release_notes: true
