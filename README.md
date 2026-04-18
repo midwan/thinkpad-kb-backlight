@@ -68,7 +68,7 @@ Levels: 0 = off, 1 = low, 2 = high. Edit and relaunch.
 - **off** (default): `GetLastInputInfo` — the system-wide idle clock. Any input, anywhere, counts.
 - **on**: RawInput-based, per-device. Only devices whose raw-input path matches one of the `InternalDeviceMarkers` substrings (case-insensitive) reset the idle timer.
 
-`InternalDeviceMarkers` is a list of substrings matched against the raw-input device name. `null` (default) means use the built-in list: `["ACPI\\", "LEN", "VID_17EF", "VEN_SYN", "VEN_ELAN", "VEN_IBM"]`. That covers PS/2 built-in keyboard + TrackPoint, Lenovo-branded HIDs, and Synaptics/Elan touchpads, which is what ships on modern ThinkPads. Run diagnostics to see how your devices classify, and add markers if something is misclassified.
+`InternalDeviceMarkers` is a list of substrings matched against the raw-input device name. `null` (default) means use the built-in list: `["ACPI\\", "LEN", "VID_17EF", "ELAN", "SYNA"]`. That covers PS/2 built-in keyboard + TrackPoint, Lenovo-branded HIDs, and Synaptics/Elan touchpads (PnP IDs like `ELAN0672`, `SYNA3299`), which is what ships on modern ThinkPads. Run diagnostics to see how your devices classify, and add markers if something is misclassified.
 
 ## Diagnostics report
 

@@ -99,11 +99,13 @@ namespace ThinkPadKbBacklight
         public static string[] DefaultMarkers()
         {
             // Case-insensitive substring match against the raw-input device name.
-            // PS/2 devices (built-in keyboard + TrackPoint) come through ACPI\.
-            // Lenovo ACPI device IDs use the LEN prefix (e.g. LEN0268).
-            // VID_17EF is Lenovo's USB VID; VEN_SYN / VEN_ELAN cover the common
-            // internal touchpad vendors on ThinkPads.
-            return new[] { "ACPI\\", "LEN", "VID_17EF", "VEN_SYN", "VEN_ELAN", "VEN_IBM" };
+            //   ACPI\    — PS/2 built-in keyboard + TrackPoint
+            //   LEN      — Lenovo ACPI PnP IDs (e.g. LEN0071)
+            //   VID_17EF — Lenovo USB VID (internal USB-over-HID peripherals)
+            //   ELAN     — Elan touchpads (PnP ID like ELAN0672, surfaces as
+            //              \\?\HID#ELAN0672#... not VEN_ELAN)
+            //   SYNA     — Synaptics touchpads (SYNA####)
+            return new[] { "ACPI\\", "LEN", "VID_17EF", "ELAN", "SYNA" };
         }
 
         public void Start()
